@@ -1,0 +1,155 @@
+{
+  "seed": 2026,
+  "target": "quality",
+  "features": [
+    "fixed_acidity",
+    "volatile_acidity",
+    "citric_acid",
+    "residual_sugar",
+    "chlorides",
+    "free_sulfur_dioxide",
+    "total_sulfur_dioxide",
+    "density",
+    "pH",
+    "sulphates",
+    "alcohol",
+    "wine_type_red"
+  ],
+  "raw_rows": 6497,
+  "duplicate_rows_removed": 1177,
+  "split_sizes": {
+    "train": 3724,
+    "validation": 1064,
+    "test": 532
+  },
+  "split_method": "Approximate 70/20/10 grouped random split; identical input rows stay together",
+  "split_fractions": {
+    "train": 0.7,
+    "validation": 0.2,
+    "test": 0.1
+  },
+  "selection_metric": "validation MAE",
+  "selected_hidden_layers": [
+    64,
+    32
+  ],
+  "best_epoch": 81,
+  "candidates": [
+    {
+      "hidden_layers": [
+        32,
+        16
+      ],
+      "validation_mae": 0.546662449836731,
+      "best_epoch": 80,
+      "epochs_run": 120
+    },
+    {
+      "hidden_layers": [
+        64,
+        32
+      ],
+      "validation_mae": 0.541804850101471,
+      "best_epoch": 81,
+      "epochs_run": 121
+    }
+  ],
+  "results": {
+    "Neural network": {
+      "train": {
+        "n": 3724,
+        "mae": 0.49262139201164246,
+        "rmse": 0.6300555325056555,
+        "r2": 0.4880884885787964,
+        "exact_accuracy": 0.5974758324382384,
+        "within_one_accuracy": 0.9761009667024705
+      },
+      "validation": {
+        "n": 1064,
+        "mae": 0.541804850101471,
+        "rmse": 0.696445955681326,
+        "r2": 0.39035576581954956,
+        "exact_accuracy": 0.5488721804511278,
+        "within_one_accuracy": 0.9595864661654135
+      },
+      "test": {
+        "n": 532,
+        "mae": 0.5156948566436768,
+        "rmse": 0.6607820603137258,
+        "r2": 0.3916360139846802,
+        "exact_accuracy": 0.5845864661654135,
+        "within_one_accuracy": 0.9680451127819549
+      }
+    },
+    "Mean baseline": {
+      "train": {
+        "n": 3724,
+        "mae": 0.6964592337608337,
+        "rmse": 0.8806054876479256,
+        "r2": 0.0,
+        "exact_accuracy": 0.43796992481203006,
+        "within_one_accuracy": 0.9250805585392051
+      },
+      "validation": {
+        "n": 1064,
+        "mae": 0.7047927379608154,
+        "rmse": 0.8923678828739915,
+        "r2": -0.0008972883224487305,
+        "exact_accuracy": 0.4332706766917293,
+        "within_one_accuracy": 0.924812030075188
+      },
+      "test": {
+        "n": 532,
+        "mae": 0.6808983087539673,
+        "rmse": 0.8474676388213813,
+        "r2": -0.0006754398345947266,
+        "exact_accuracy": 0.4342105263157895,
+        "within_one_accuracy": 0.943609022556391
+      }
+    },
+    "Ridge regression": {
+      "train": {
+        "n": 3724,
+        "mae": 0.5664135217666626,
+        "rmse": 0.7350998811262188,
+        "r2": 0.3031650185585022,
+        "exact_accuracy": 0.5362513426423201,
+        "within_one_accuracy": 0.9505907626208379
+      },
+      "validation": {
+        "n": 1064,
+        "mae": 0.5770203471183777,
+        "rmse": 0.7380486581134142,
+        "r2": 0.31534522771835327,
+        "exact_accuracy": 0.5281954887218046,
+        "within_one_accuracy": 0.9473684210526315
+      },
+      "test": {
+        "n": 532,
+        "mae": 0.5313810706138611,
+        "rmse": 0.6831927403947077,
+        "r2": 0.34967041015625,
+        "exact_accuracy": 0.5601503759398496,
+        "within_one_accuracy": 0.9605263157894737
+      }
+    }
+  },
+  "test_by_wine_type": {
+    "red": {
+      "n": 120,
+      "mae": 0.5083884596824646,
+      "rmse": 0.6435415587873318,
+      "r2": 0.4395020604133606,
+      "exact_accuracy": 0.5916666666666667,
+      "within_one_accuracy": 0.9833333333333333
+    },
+    "white": {
+      "n": 412,
+      "mae": 0.5178229212760925,
+      "rmse": 0.6657196461185751,
+      "r2": 0.37030649185180664,
+      "exact_accuracy": 0.5825242718446602,
+      "within_one_accuracy": 0.9635922330097088
+    }
+  }
+}

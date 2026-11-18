@@ -1,0 +1,63 @@
+WINE DATA ANALYSIS AND NEURAL NETWORK REPORT
+
+1. Data inspection
+I examined Combined_Wine.csv, which contains 6,497 wines and 14 variables:
+11 chemical measurements, quality score, wine type, and quality class.
+There were no missing values and 1,177 exact duplicate rows. White wines
+accounted for 4,898 rows and red wines for 1,599 rows.
+
+2. Exploratory analysis and visualizations
+I created wine_visuals.py to generate a distribution chart for every
+variable, boxplots, and correlation matrices. Alcohol had the strongest
+positive linear association with quality (Pearson r = 0.44). Density
+(r = -0.31) and volatile acidity (r = -0.27) were negatively associated
+with quality. These associations do not establish cause and effect.
+
+I then compared relationships within each wine type. An interesting
+finding was that volatile acidity and total sulfur dioxide correlated
+negatively across all wines (r = -0.41), but slightly positively within
+red wines (r = 0.08) and white wines (r = 0.09). Differences between the
+wine types help explain this reversal. Residual sugar and density were
+also more strongly correlated in white wines (r = 0.84) than red wines
+(r = 0.35). Additional boxplots and grouped charts illustrate these patterns.
+
+3. Neural network preparation and training
+I created train_wine_neural_network.py to predict the numerical quality
+score from all 11 chemical measurements and encoded wine type.
+quality_class was excluded because it is derived from the quality score
+and would reveal information about the answer.
+
+After removing exact duplicates, I split the 5,320 remaining rows into
+3,724 training, 1,064 validation, and 532 test rows (70/20/10).
+Identical inputs stayed in the same split, and scaling used training
+data only to prevent information leakage.
+
+I compared two PyTorch networks with hidden layers of (32, 16) and (64, 32)
+neurons. Validation error selected the (64, 32) network at epoch 81, using
+early stopping. The test set was evaluated after model selection.
+
+4. Results and evaluation visuals
+Split          Exact accuracy   Within one point   Mean absolute error
+Training          59.7%              97.6%              0.493
+Validation        54.9%              96.0%              0.542
+Test              58.5%              96.8%              0.516
+
+Accuracy uses rounded predictions; error uses continuous predictions
+and is measured in quality points. Test exact accuracy exceeded a mean
+baseline (43.4%) and ridge regression (56.0%), with only a modest gain
+over ridge regression.
+
+Evaluation visuals include learning curves, split accuracy, a confusion
+matrix, prediction errors, and baseline comparisons. Model weights,
+predictions, and metrics are saved in wine_neural_network. I verified
+split separation and reproduced the results from the saved model.
+
+5. Limitations
+Quality scores of 5 and 6 dominate the dataset. The model performed worse
+on rare extreme scores, so the high within-one-point accuracy should be
+read alongside exact accuracy and error by score. Results come from one
+fixed split and may differ with other splits or new wine populations.
+
+To regenerate the outputs:
+python3 wine_visuals.py
+python3 train_wine_neural_network.py
