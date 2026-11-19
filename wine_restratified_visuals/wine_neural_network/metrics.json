@@ -1,0 +1,152 @@
+{
+  "data_source": {
+    "csv": "wine2.csv",
+    "sha256": "ff8898e24f19f48a77ffe8f5a7a0d2784388f184f4e4a4bf3276841eeebaacff"
+  },
+  "seed": 2026,
+  "target": "quality",
+  "features": [
+    "fixed_acidity",
+    "volatile_acidity",
+    "citric_acid",
+    "residual_sugar",
+    "chlorides",
+    "free_sulfur_dioxide",
+    "total_sulfur_dioxide",
+    "density",
+    "pH",
+    "sulphates",
+    "alcohol",
+    "wine_type_red"
+  ],
+  "raw_rows": 5320,
+  "duplicate_rows_removed": 0,
+  "split_sizes": {
+    "development": 4788,
+    "test_reserved": 532
+  },
+  "split_method": "Class-stratified 10% holdout and nested validation, preserving identical-input groups",
+  "test_evaluated": false,
+  "folds": 5,
+  "max_epochs": 400,
+  "patience": 40,
+  "selection_metric": "mean outer-fold validation MAE",
+  "selected_model": "Neural network 32-16",
+  "selected_hidden_layers": [
+    32,
+    16
+  ],
+  "final_epochs": 58,
+  "cross_validation": {
+    "Neural network 32-16": {
+      "pooled": {
+        "n": 4788,
+        "mae": 0.5417691851618296,
+        "rmse": 0.6963879868366031,
+        "r2": 0.3736956093450192,
+        "exact_accuracy": 0.560359231411863,
+        "within_one_accuracy": 0.9613617376775272
+      },
+      "mean": {
+        "mae": 0.5417723178863525,
+        "rmse": 0.6961228997748802,
+        "r2": 0.37386317253112794,
+        "exact_accuracy": 0.5603530081609414,
+        "within_one_accuracy": 0.9613632546034822
+      },
+      "std": {
+        "mae": 0.01630001891676673,
+        "rmse": 0.021583663337088336,
+        "r2": 0.02493603549576808,
+        "exact_accuracy": 0.017574139419424983,
+        "within_one_accuracy": 0.006874954167539361
+      }
+    },
+    "Neural network 64-32": {
+      "pooled": {
+        "n": 4788,
+        "mae": 0.5458624556648204,
+        "rmse": 0.7022474435294873,
+        "r2": 0.3631117322152525,
+        "exact_accuracy": 0.5492898913951546,
+        "within_one_accuracy": 0.9601086048454469
+      },
+      "mean": {
+        "mae": 0.545862865447998,
+        "rmse": 0.7021268561015368,
+        "r2": 0.3631087183952332,
+        "exact_accuracy": 0.5492889444440809,
+        "within_one_accuracy": 0.9601082453648864
+      },
+      "std": {
+        "mae": 0.011371371575025295,
+        "rmse": 0.01450931369294796,
+        "r2": 0.007702464942397347,
+        "exact_accuracy": 0.019811788180133603,
+        "within_one_accuracy": 0.004518432384012397
+      }
+    },
+    "Mean baseline": {
+      "pooled": {
+        "n": 4788,
+        "mae": 0.6949694491269296,
+        "rmse": 0.8799981874446496,
+        "r2": -0.00010700747799585741,
+        "exact_accuracy": 0.4365079365079365,
+        "within_one_accuracy": 0.9269005847953217
+      },
+      "mean": {
+        "mae": 0.6949669480323791,
+        "rmse": 0.8799012892597922,
+        "r2": -0.0003025531768798828,
+        "exact_accuracy": 0.43651306819545244,
+        "within_one_accuracy": 0.9269005656594743
+      },
+      "std": {
+        "mae": 0.009370269773445294,
+        "rmse": 0.01449012918472628,
+        "r2": 0.0002872199341944636,
+        "exact_accuracy": 0.011277442094063669,
+        "within_one_accuracy": 0.005622325019474224
+      }
+    },
+    "Ridge regression": {
+      "pooled": {
+        "n": 4788,
+        "mae": 0.5664052820308894,
+        "rmse": 0.7331911362135893,
+        "r2": 0.30574770030834286,
+        "exact_accuracy": 0.5382205513784462,
+        "within_one_accuracy": 0.9492481203007519
+      },
+      "mean": {
+        "mae": 0.5664066509436946,
+        "rmse": 0.7330239179955392,
+        "r2": 0.30579095384232247,
+        "exact_accuracy": 0.5382222629433053,
+        "within_one_accuracy": 0.9492474961987597
+      },
+      "std": {
+        "mae": 0.013231464424128953,
+        "rmse": 0.0176051042296802,
+        "r2": 0.016542590285032743,
+        "exact_accuracy": 0.014741653920765967,
+        "within_one_accuracy": 0.009006171750828308
+      }
+    }
+  },
+  "final_training_metrics": {
+    "n": 4788,
+    "mae": 0.5131034255027771,
+    "rmse": 0.6600051119996548,
+    "r2": 0.4374287724494934,
+    "exact_accuracy": 0.5785296574770259,
+    "within_one_accuracy": 0.9684628237259816
+  },
+  "training_policy": "Original training rows once per epoch / fit; no class resampling or class weighting",
+  "final_training_class_counts": {
+    "Low": 213,
+    "Medium": 3667,
+    "High": 908
+  }
+}

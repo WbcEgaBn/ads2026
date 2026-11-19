@@ -1,0 +1,32 @@
+{
+  "source": {
+    "csv": "wine2.csv",
+    "sha256": "ff8898e24f19f48a77ffe8f5a7a0d2784388f184f4e4a4bf3276841eeebaacff"
+  },
+  "legacy_files_unchanged": 74,
+  "models": {
+    "wine_knn": {
+      "training_records_checked": 10,
+      "partition_stages_checked": 11,
+      "development_rows": 4256,
+      "test_rows_reserved": 1064,
+      "largest_class_count_deviation_from_parent_proportions": 0.8733552631578938,
+      "zero_repeated_training_indices": true,
+      "out_of_fold_coverage_complete": true,
+      "reserved_rows_excluded_from_predictions": true,
+      "prediction_and_metric_checks_passed": true
+    },
+    "wine_neural_network": {
+      "training_records_checked": 31,
+      "partition_stages_checked": 11,
+      "development_rows": 4788,
+      "test_rows_reserved": 532,
+      "largest_class_count_deviation_from_parent_proportions": 0.7642913077525577,
+      "zero_repeated_training_indices": true,
+      "out_of_fold_coverage_complete": true,
+      "reserved_rows_excluded_from_predictions": true,
+      "prediction_and_metric_checks_passed": true
+    }
+  },
+  "charts": 34
+}

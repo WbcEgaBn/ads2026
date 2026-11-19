@@ -1,0 +1,11 @@
+stage,model,training_n,unique_source_rows,repeated_source_rows,Low,Medium,High
+outer_fold_1,KNN (all K values),3830,3830,0,170,2934,726
+outer_fold_2,KNN (all K values),3830,3830,0,170,2934,726
+outer_fold_3,KNN (all K values),3830,3830,0,170,2934,726
+outer_fold_4,KNN (all K values),3830,3830,0,170,2934,726
+outer_fold_5,KNN (all K values),3830,3830,0,170,2934,726
+outer_fold_6,KNN (all K values),3830,3830,0,170,2934,726
+outer_fold_7,KNN (all K values),3831,3831,0,171,2934,726
+outer_fold_8,KNN (all K values),3831,3831,0,170,2934,727
+outer_fold_9,KNN (all K values),3831,3831,0,170,2934,727
+outer_fold_10,KNN (all K values),3831,3831,0,170,2934,727

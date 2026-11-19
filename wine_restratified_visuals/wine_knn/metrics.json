@@ -1,0 +1,39 @@
+{
+  "data_source": {
+    "csv": "wine2.csv",
+    "sha256": "ff8898e24f19f48a77ffe8f5a7a0d2784388f184f4e4a4bf3276841eeebaacff"
+  },
+  "raw_rows": 5320,
+  "seed": 2026,
+  "target": "quality_class",
+  "folds": 10,
+  "split_sizes": {
+    "development": 4256,
+    "test_reserved": 1064
+  },
+  "test_evaluated": false,
+  "best_k": 1,
+  "mean_validation_macro_f1": 0.5280885260333605,
+  "std_validation_macro_f1": 0.04005226718397101,
+  "training_policy": "Original training rows once per epoch / fit; no class resampling or class weighting",
+  "roc_auc": {
+    "method": "one-vs-rest",
+    "probability_class_order": [
+      "Low",
+      "Medium",
+      "High"
+    ],
+    "pooled_out_of_fold": {
+      "per_class": {
+        "Low": 0.5979564516569681,
+        "Medium": 0.6516711015842511,
+        "High": 0.6890273674498616
+      },
+      "macro": 0.646218306897027,
+      "weighted": 0.6563690427772236,
+      "micro": 0.8116188909774437
+    },
+    "mean_fold_macro": 0.6462671431179816,
+    "std_fold_macro": 0.02166424231313221
+  }
+}
