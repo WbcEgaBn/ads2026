@@ -1,0 +1,14 @@
+{
+  "seed": 2026,
+  "target": "quality_class",
+  "folds": 10,
+  "split_sizes": {
+    "development": 5197,
+    "test_reserved": 1300
+  },
+  "test_evaluated": false,
+  "best_k": 1,
+  "mean_validation_macro_f1": 0.6002784540514335,
+  "std_validation_macro_f1": 0.03786332676929811,
+  "training_balance": "Keep Medium; sample Low and High with replacement to match Medium; training partitions only"
+}

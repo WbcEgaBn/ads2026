@@ -1,63 +1,68 @@
-WINE DATA ANALYSIS AND NEURAL NETWORK REPORT
+WINE DATA ANALYSIS AND BALANCED MODEL TRAINING REPORT
 
-1. Data inspection
-I examined Combined_Wine.csv, which contains 6,497 wines and 14 variables:
-11 chemical measurements, quality score, wine type, and quality class.
-There were no missing values and 1,177 exact duplicate rows. White wines
-accounted for 4,898 rows and red wines for 1,599 rows.
+1. Data and exploratory visuals
+Combined_Wine.csv contains 6,497 rows, 14 variables, no missing values, and
+1,177 exact duplicates. The 21 exploratory charts retain all source rows.
+Alcohol correlates with quality at r = 0.44; density at r = -0.31 and
+volatile acidity at r = -0.27. These associations are not causal findings.
 
-2. Exploratory analysis and visualizations
-I created wine_visuals.py to generate a distribution chart for every
-variable, boxplots, and correlation matrices. Alcohol had the strongest
-positive linear association with quality (Pearson r = 0.44). Density
-(r = -0.31) and volatile acidity (r = -0.27) were negatively associated
-with quality. These associations do not establish cause and effect.
+2. Shared implementation and scaling
+Both training implementations now live in preprocessing.py.
+model_training.py and train_wine_neural_network.py are compatibility entry
+points. Both models use the same chemical features and binary wine encoding.
+StandardScaler learns feature means and variances from each original training
+partition before resampling. Validation rows receive that training partition's
+transformation. Reserved test rows are not transformed or evaluated.
 
-I then compared relationships within each wine type. An interesting
-finding was that volatile acidity and total sulfur dioxide correlated
-negatively across all wines (r = -0.41), but slightly positively within
-red wines (r = 0.08) and white wines (r = 0.09). Differences between the
-wine types help explain this reversal. Residual sugar and density were
-also more strongly correlated in white wines (r = 0.84) than red wines
-(r = 0.35). Additional boxplots and grouped charts illustrate these patterns.
+3. Equal training counts for Low, Medium, and High
+The shared balance_training_indices helper implements the original KNN policy:
+retain Medium training rows, then sample Low and High with replacement to match
+the Medium count. Resampling happens only after data is partitioned.
+Every inner neural network fit, outer fold refit, and final fit uses exactly
+equal class totals. Each epoch traverses that balanced dataset once.
+The final neural network fit uses 3,665 Low, 3,665 Medium, and 3,665 High samples
+per epoch (10,995 samples total, including repeated minority-class rows).
+Validation folds keep their original class proportions.
+training_balance.csv in each model directory records counts for every fit.
 
-3. Neural network preparation and training
-I created train_wine_neural_network.py to predict the numerical quality
-score from all 11 chemical measurements and encoded wine type.
-quality_class was excluded because it is derived from the quality score
-and would reveal information about the answer.
+4. Training and validation recipes
+KNN retains the original 6,497 raw rows, stratified 80/20 split, 10-fold
+validation, distance weighting, Manhattan distance, and odd K values 1–21.
+Scaling is now fitted inside each fold. Its 1,300 test rows are not evaluated.
+Best K: 1; mean validation macro F1: 0.6003.
 
-After removing exact duplicates, I split the 5,320 remaining rows into
-3,724 training, 1,064 validation, and 532 test rows (70/20/10).
-Identical inputs stayed in the same split, and scaling used training
-data only to prevent information leakage.
+The neural network retains numerical quality as its target; quality_class is
+used for balancing and excluded from input features. Exact duplicates are
+removed, leaving 5,320 rows. The original 532-row test partition is reserved.
+Grouped 5-fold validation uses 4,788 development rows; identical inputs stay
+together. An inner grouped validation split selects the epoch count, then each
+network refits on its full outer training fold before validation scoring.
+Selected architecture: (64, 32); final training: 5 epochs.
+Mean validation MAE: 0.638 +/- 0.019 quality points.
+Mean exact rounded-score accuracy: 47.5% +/- 1.5%.
+Mean within-one-point accuracy: 93.5% +/- 0.8%.
+The final scaler is fitted on the original 4,788 development rows; the target
+mean is calculated from the balanced training samples.
 
-I compared two PyTorch networks with hidden layers of (32, 16) and (64, 32)
-neurons. Validation error selected the (64, 32) network at epoch 81, using
-early stopping. The test set was evaluated after model selection.
+5. Artifacts and verification
+Regenerated the neural network model, validation predictions, six model charts,
+and KNN validation outputs and charts. training_class_balance.png shows counts
+before and after resampling. Full results are in each model directory's report.md.
+Verified equal counts in all 31 neural network/baseline training records and all
+10 KNN folds; sampled rows stay inside their training partitions. Confirmed
+validation coverage, reserved-row exclusion, and saved scaler means/variances.
+No test-set predictions or test-set model evaluation were performed.
 
-4. Results and evaluation visuals
-Split          Exact accuracy   Within one point   Mean absolute error
-Training          59.7%              97.6%              0.493
-Validation        54.9%              96.0%              0.542
-Test              58.5%              96.8%              0.516
+6. Limitations
+Balancing gives rare classes more training influence and changes the resulting
+metrics. Model selection uses these validation results, so selected-model scores
+may be optimistic. KNN and the neural network use different targets and split
+recipes; their scores are not directly comparable. Earlier repository outputs
+evaluated the neural network's reserved partition, so it is not historically
+unseen. This workflow does not evaluate it.
 
-Accuracy uses rounded predictions; error uses continuous predictions
-and is measured in quality points. Test exact accuracy exceeded a mean
-baseline (43.4%) and ridge regression (56.0%), with only a modest gain
-over ridge regression.
+Regenerate both workflows:
+python3 preprocessing.py
 
-Evaluation visuals include learning curves, split accuracy, a confusion
-matrix, prediction errors, and baseline comparisons. Model weights,
-predictions, and metrics are saved in wine_neural_network. I verified
-split separation and reproduced the results from the saved model.
-
-5. Limitations
-Quality scores of 5 and 6 dominate the dataset. The model performed worse
-on rare extreme scores, so the high within-one-point accuracy should be
-read alongside exact accuracy and error by score. Results come from one
-fixed split and may differ with other splits or new wine populations.
-
-To regenerate the outputs:
-python3 wine_visuals.py
-python3 train_wine_neural_network.py
+Run only the neural network:
+python3 preprocessing.py --model neural-network --folds 5
