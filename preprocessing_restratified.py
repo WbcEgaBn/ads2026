@@ -61,6 +61,37 @@ def feature_matrix(data):
     return X
 
 
+def load_saved_holdout(csv_path, model_dir, metadata):
+    """Validate saved row membership without predicting or scoring test rows."""
+    if data_source(csv_path)["sha256"] != metadata["data_source"]["sha256"]:
+        raise ValueError("The CSV does not match the source used to train this model.")
+    assignments = pd.read_csv(Path(model_dir) / "partition_assignments.csv")
+    holdout = assignments[assignments.stage == "holdout"]
+    development = holdout.loc[holdout.split == "development", "source_row"].to_numpy()
+    reserved = holdout.loc[holdout.split == "test_reserved", "source_row"].to_numpy()
+    if not len(development) or not len(reserved):
+        raise ValueError("Saved development and reserved-test memberships are required.")
+    if len(np.unique(development)) != len(development) or len(np.unique(reserved)) != len(reserved):
+        raise ValueError("Saved partition memberships contain duplicate source rows.")
+    if set(development) & set(reserved):
+        raise ValueError("Reserved test rows overlap the model's development/training rows.")
+    if (len(development) != metadata["split_sizes"]["development"]
+            or len(reserved) != metadata["split_sizes"]["test_reserved"]):
+        raise ValueError("Saved partition sizes do not match the trained model.")
+    raw = pd.read_csv(csv_path)
+    source_rows = np.concatenate([development, reserved])
+    if (not np.issubdtype(source_rows.dtype, np.integer)
+            or (source_rows < 0).any() or (source_rows >= len(raw)).any()):
+        raise ValueError("Saved source rows must be valid zero-based CSV row IDs.")
+    X = feature_matrix(raw)
+    if not np.isfinite(X.to_numpy()).all():
+        raise ValueError("Input features must be finite numbers.")
+    groups = pd.util.hash_pandas_object(X, index=False).to_numpy()
+    if set(groups[development]) & set(groups[reserved]):
+        raise ValueError("Identical inputs occur in both the development and test partitions.")
+    return raw, X, development, reserved
+
+
 def stratified_folds(X, classes, groups, folds, seed):
     """Use exact row stratification for singletons, grouped stratification otherwise."""
     classes, groups = np.asarray(classes), np.asarray(groups)
@@ -159,9 +190,9 @@ def network(hidden):
 def metrics(actual, probabilities):
     """Evaluate encoded class targets; probability columns follow CLASSES."""
     actual = np.asarray(actual, dtype=int)
-    # Re-normalize after float32 softmax/CSV conversion for stable log loss.
+    # Normalize only for log loss. Rescaling rows before ROC AUC can break
+    # tied forest scores and change their ranking through roundoff.
     probabilities = np.asarray(probabilities, dtype=float)
-    probabilities = probabilities / probabilities.sum(axis=1, keepdims=True)
     predicted = probabilities.argmax(axis=1)
     indicators = actual[:, None] == np.arange(len(CLASSES))
     return {
@@ -169,7 +200,8 @@ def metrics(actual, probabilities):
         "accuracy": float(accuracy_score(actual, predicted)),
         "macro_f1": float(f1_score(actual, predicted, labels=range(len(CLASSES)), average="macro", zero_division=0)),
         "weighted_f1": float(f1_score(actual, predicted, labels=range(len(CLASSES)), average="weighted", zero_division=0)),
-        "log_loss": float(log_loss(actual, probabilities, labels=range(len(CLASSES)))),
+        "log_loss": float(log_loss(actual, probabilities / probabilities.sum(axis=1, keepdims=True),
+                                   labels=range(len(CLASSES)))),
         "roc_auc_macro": float(roc_auc_score(indicators, probabilities, average="macro"))
         if set(actual) == set(range(len(CLASSES))) else None,
     }
@@ -565,7 +597,7 @@ def classification_roc_auc(actual, probabilities):
     }
 
 
-def save_neural_roc_outputs(predictions, fold_metrics, output):
+def save_neural_roc_outputs(predictions, fold_metrics, output, model_name="Neural network classifier"):
     actual = predictions.actual_class.to_numpy()
     probabilities = predictions[PROBABILITY_COLUMNS].to_numpy()
     pooled = classification_roc_auc(actual, probabilities)
@@ -586,7 +618,7 @@ def save_neural_roc_outputs(predictions, fold_metrics, output):
     ax.plot(fpr, tpr, color="#6b4a88", ls=":", label=f"Micro average: AUC {pooled['micro']:.4f}")
     ax.plot([0, 1], [0, 1], color="grey", ls="--", label="Chance: AUC 0.5000")
     ax.set(xlim=(0, 1), ylim=(0, 1.02), xlabel="False positive rate", ylabel="True positive rate (recall)",
-           title=f"Neural network classifier: out-of-fold ROC curves\nMacro AUC {pooled['macro']:.4f} | {len(actual):,} validation rows")
+           title=f"{model_name}: out-of-fold ROC curves\nMacro AUC {pooled['macro']:.4f} | {len(actual):,} validation rows")
     ax.legend(loc="lower right")
     save_plot(fig, output, "roc_curves.png")
     pd.concat(curves, ignore_index=True).to_csv(output / "roc_curves.csv", index=False)
@@ -594,7 +626,7 @@ def save_neural_roc_outputs(predictions, fold_metrics, output):
     fig, ax = plt.subplots(figsize=(9, 5))
     ax.plot(fold_metrics.fold, fold_metrics.roc_auc_macro, marker="o")
     ax.set(xlabel="Validation fold", ylabel="Macro ROC AUC", ylim=(0, 1),
-           xticks=fold_metrics.fold, title="Selected neural network: ROC AUC by fold")
+           xticks=fold_metrics.fold, title=f"{model_name}: ROC AUC by fold")
     save_plot(fig, output, "roc_auc_by_fold.png")
     return {"method": "one-vs-rest", "probability_class_order": CLASSES,
             "pooled_out_of_fold": pooled,
@@ -816,6 +848,27 @@ def write_run_summary(output):
             report.extend(["", "[Neural network reserved-test results](wine_neural_network/testing/report.md): "
                            f"{test_scores['n']} rows; accuracy {test_scores['accuracy']:.1%}; "
                            f"macro F1 {test_scores['macro_f1']:.4f}; macro ROC AUC {tested['roc_auc']['macro']:.4f}."])
+    forest_path = output / "wine_random_forest" / "metrics.json"
+    if forest_path.exists():
+        forest = json.loads(forest_path.read_text())
+        hashes = forest.get("reference_neural_artifact_hashes", {})
+        if hashes and all(hashlib.sha256((output / "wine_neural_network" / name).read_bytes()).hexdigest() == digest
+                          for name, digest in hashes.items()):
+            validation = forest["validation_metrics"]
+            report.extend(["", "[Random forest on the same neural network splits](wine_random_forest/report.md). "
+                           "Run `python3 train_wine_random_forest.py` after neural network training.",
+                           f"Validation accuracy {validation['accuracy']:.1%}; macro F1 {validation['macro_f1']:.4f}; "
+                           f"macro ROC AUC {validation['roc_auc_macro']:.4f}.",
+                           "Training leaves test rows unscored. Evaluate separately with `python3 testing.py --model random-forest`."])
+            forest_test_path = output / "wine_random_forest" / "testing" / "test_metrics.json"
+            if forest_test_path.exists():
+                forest_test = json.loads(forest_test_path.read_text())
+                model_hash = hashlib.sha256((output / "wine_random_forest" / "model.joblib").read_bytes()).hexdigest()
+                if forest_test.get("evaluator") == "testing.py" and forest_test.get("model_sha256") == model_hash:
+                    tested = forest_test["test_metrics"]
+                    report.append("[Random forest testing.py results](wine_random_forest/testing/report.md): "
+                                  f"accuracy {tested['accuracy']:.1%}; macro F1 {tested['macro_f1']:.4f}; "
+                                  f"macro ROC AUC {tested['roc_auc_macro']:.4f}.")
     (output / "README.md").write_text("\n".join(report) + "\n", encoding="utf-8")
 
 

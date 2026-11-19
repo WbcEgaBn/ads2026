@@ -1,7 +1,8 @@
 # ads2026
 
-Wine quality exploration and **Low / Medium / High classification** with KNN
-and a neural network. The active workflow is `preprocessing_restratified.py`.
+Wine quality exploration and **Low / Medium / High classification** with KNN,
+a neural network, and a random forest. `preprocessing_restratified.py` trains
+KNN and the neural network; the forest reuses the saved neural network splits.
 
 ```bash
 python3 -m pip install -r requirements-neural-network.txt
@@ -19,7 +20,7 @@ Run just KNN with `python3 preprocessing_restratified.py --model knn`
 or `python3 model_training.py`. Both use K=3.
 Outputs are in [wine_restratified_visuals/](wine_restratified_visuals/README.md).
 
-Both models predict the existing `quality_class` labels: **Low, Medium, High**.
+All three models predict the existing `quality_class` labels: **Low, Medium, High**.
 They use 11 chemical measurements and red/white wine type as inputs. Numerical
 `quality` is unused by training and is not required in a training CSV.
 Neither `quality` nor `quality_class` is an input feature. Source data and
@@ -74,6 +75,39 @@ quality is unused. Results are saved in
 `test_accuracy.png` (accuracy and confusion matrix), `test_roc_curves.png`,
 `test_metrics.json`, per-class metrics, and test predictions. Options are
 `--csv`, `--model-dir`, and `--output`.
+
+Train and validate the random forest after the neural network artifacts exist:
+
+```bash
+python3 train_wine_random_forest.py
+```
+
+This does **not** predict or score test rows. Evaluate the saved forest only through:
+
+```bash
+python3 testing.py --model random-forest
+```
+
+It reads the neural checkpoint's metadata and reuses the exact development/test
+row IDs, validation folds, feature order, class encoding, seed, and final scaler.
+The forest learns its own trees; neural network weights and settings such as
+hidden layers, learning rate, and epochs do not apply. It uses 300 trees with
+`max_features="sqrt"`, no class weights, and `bootstrap=False` to retain every
+training row in each tree. Parameters are fixed before validation and testing.
+
+The [random forest report](wine_restratified_visuals/wine_random_forest/report.md)
+links matching validation ROC curves, confusion matrices, training/validation
+performance, model comparisons, fold metrics, class distributions, and learning
+curves by number of trees. It also includes feature importance and separate
+test accuracy/ROC plots under `wine_random_forest/testing/` when `testing.py` is run. Validation comparisons
+use the selected neural network and its baselines on the same saved folds.
+`model.joblib` stores the fitted scaler/forest pipeline; output classes use
+Low=0, Medium=1, High=2. `aligned_probabilities(model, X)` from the forest script
+returns probabilities in that order. Neural artifacts are preserved.
+
+Forest options: `--csv`, `--neural-dir`, `--output`, `--trees`, and `--jobs`.
+`testing.py` defaults to the neural network; `--model random-forest` selects the
+forest and its output directory. No training entry point invokes test evaluation.
 
 Optional arguments: `--model`, `--folds`, `--epochs` (maximum inner-fit epochs),
 `--patience`, `--csv`, and `--output`. With `--model all`, `--output` names the

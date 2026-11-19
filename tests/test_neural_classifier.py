@@ -14,6 +14,8 @@ import pandas as pd
 import torch
 
 import preprocessing_restratified as workflow
+import train_wine_random_forest as random_forest
+import testing
 
 
 class NeuralClassifierTests(unittest.TestCase):
@@ -79,6 +81,40 @@ class NeuralClassifierTests(unittest.TestCase):
         counts = pd.read_csv(args.output / 'training_rows.csv')
         self.assertTrue(counts.repeated_source_rows.eq(0).all())
 
+        # The forest must reuse saved neural splits without changing neural artifacts.
+        forest_args = argparse.Namespace(csv=self.csv, neural_dir=args.output,
+                                         output=self.root / 'forest', trees=8, jobs=1)
+        with patch.object(testing, 'run_test', side_effect=AssertionError('Training must not score the test set')), \
+                contextlib.redirect_stdout(io.StringIO()):
+            forest_summary = random_forest.run(forest_args)
+        forest_predictions = pd.read_csv(forest_args.output / 'predictions.csv')
+        self.assertFalse(forest_summary['test_evaluated'])
+        self.assertNotIn('test_metrics', forest_summary)
+        self.assertFalse((forest_args.output / 'testing').exists())
+        test_args = argparse.Namespace(model='random-forest', csv=self.csv,
+                                       model_dir=forest_args.output, output=forest_args.output / 'testing')
+        with patch.object(random_forest.RandomForestClassifier, 'fit', side_effect=AssertionError('Testing must not retrain')), \
+                patch.object(workflow.StandardScaler, 'fit', side_effect=AssertionError('Testing must not refit scaling')), \
+                contextlib.redirect_stdout(io.StringIO()):
+            forest_test_summary = testing.run_test(test_args)
+        self.assertEqual(forest_test_summary['evaluator'], 'testing.py')
+        forest_test = pd.read_csv(forest_args.output / 'testing' / 'test_predictions.csv')
+        self.assertEqual(set(forest_predictions.source_row), set(predictions.source_row))
+        self.assertEqual(set(forest_test.source_row), reserved)
+        self.assertFalse(set(forest_test.source_row) & set(forest_predictions.source_row))
+        original_folds = pd.read_csv(args.output / 'fold_assignments.csv').set_index('source_row').fold.sort_index()
+        forest_folds = forest_predictions.set_index('source_row').fold.sort_index()
+        pd.testing.assert_series_equal(forest_folds, original_folds)
+        self.assertEqual(forest_summary['parameters']['n_estimators'], 8)
+        self.assertFalse(forest_summary['parameters']['bootstrap'])
+        self.assertNotIn('quality', forest_summary['features'])
+        forest_pipeline = joblib.load(forest_args.output / 'model.joblib')
+        self.assertIsInstance(forest_pipeline.named_steps['classifier'], random_forest.RandomForestClassifier)
+        self.assertEqual(len(forest_pipeline.named_steps['classifier'].estimators_), 8)
+        forest_X = workflow.feature_matrix(pd.read_csv(self.csv).iloc[forest_test.source_row])
+        np.testing.assert_allclose(random_forest.aligned_probabilities(forest_pipeline, forest_X),
+                                   forest_test[workflow.PROBABILITY_COLUMNS].to_numpy(), atol=1e-12)
+
     def test_knn_keeps_the_requested_three_neighbours(self):
         args = argparse.Namespace(csv=self.csv, output=self.root / 'knn', folds=2)
         with contextlib.redirect_stdout(io.StringIO()):
@@ -89,6 +125,14 @@ class NeuralClassifierTests(unittest.TestCase):
         for filename in ['predictions.csv', 'fold_metrics.csv']:
             self.assertEqual(set(pd.read_csv(args.output / filename).k), {3})
         self.assertFalse((args.output / 'tuning.csv').exists())
+
+    def test_roc_metrics_preserve_tied_forest_probabilities(self):
+        actual = np.array([0, 1, 2, 0, 1, 2])
+        probabilities = np.tile([0.1, 0.2, 0.7], (6, 1))
+        probabilities[0, 2] += 1e-15
+        expected = workflow.classification_roc_auc(np.asarray(workflow.CLASSES)[actual], probabilities)
+        scores = workflow.metrics(actual, probabilities)
+        self.assertAlmostEqual(scores['roc_auc_macro'], expected['macro'], places=15)
 
 
 if __name__ == '__main__':

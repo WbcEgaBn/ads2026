@@ -1,4 +1,4 @@
-"""Evaluate the saved neural classifier on its reserved Low/Medium/High test rows.
+"""Evaluate saved neural or random forest classifiers on their reserved test rows.
 
 Run: python3 testing.py
 The saved model, scaler, and partition assignments are used without refitting.
@@ -13,6 +13,7 @@ import joblib
 import numpy as np
 import pandas as pd
 import torch
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import confusion_matrix, precision_recall_fscore_support, roc_curve
 
 import preprocessing_restratified as training
@@ -37,33 +38,9 @@ def load_test_data(csv_path, model_dir):
             or checkpoint.get("features") != training.FEATURES):
         raise ValueError("Use the active Low/Medium/High classifier checkpoint with its original feature order.")
 
-    assignments = pd.read_csv(model_dir / "partition_assignments.csv")
-    holdout = assignments[assignments.stage == "holdout"]
-    development = holdout.loc[holdout.split == "development", "source_row"].to_numpy()
-    reserved = holdout.loc[holdout.split == "test_reserved", "source_row"].to_numpy()
-    if not len(development) or not len(reserved):
-        raise ValueError("Saved development and reserved-test memberships are required.")
-    if len(np.unique(development)) != len(development) or len(np.unique(reserved)) != len(reserved):
-        raise ValueError("Saved partition memberships contain duplicate source rows.")
-    if set(development) & set(reserved):
-        raise ValueError("Reserved test rows overlap the model's development/training rows.")
-    if (len(development) != checkpoint["training_rows"]
-            or len(development) != metadata["split_sizes"]["development"]
-            or len(reserved) != metadata["split_sizes"]["test_reserved"]):
+    raw, X, development, reserved = training.load_saved_holdout(csv_path, model_dir, metadata)
+    if len(development) != checkpoint["training_rows"]:
         raise ValueError("Saved partition sizes do not match the trained model.")
-
-    raw = pd.read_csv(csv_path)
-    source_rows = np.concatenate([development, reserved])
-    if (not np.issubdtype(source_rows.dtype, np.integer)
-            or (source_rows < 0).any() or (source_rows >= len(raw)).any()):
-        raise ValueError("Saved source rows must be valid zero-based CSV row IDs.")
-    X = training.feature_matrix(raw)
-    if not np.isfinite(X.to_numpy()).all():
-        raise ValueError("Input features must be finite numbers.")
-    # Check both row IDs and identical-input groups before any test predictions.
-    groups = pd.util.hash_pandas_object(X, index=False).to_numpy()
-    if set(groups[development]) & set(groups[reserved]):
-        raise ValueError("Identical inputs occur in both the development and test partitions.")
     test_data = raw.iloc[reserved][["wine_type", "quality_class"]].copy()
     test_data.insert(0, "source_row", reserved)
     if not test_data.quality_class.isin(training.CLASSES).all():
@@ -80,11 +57,38 @@ def load_test_data(csv_path, model_dir):
     return model, scaler, X.iloc[reserved], test_data, checkpoint
 
 
-def save_accuracy_plot(predictions, scores, baseline_accuracy, output):
+def load_forest_test_data(csv_path, model_dir):
+    """Reload the trained forest and select only its saved reserved rows."""
+    model_dir = Path(model_dir)
+    metadata = json.loads((model_dir / "metrics.json").read_text())
+    if (metadata.get("task") != "multiclass_classification"
+            or metadata.get("target") != "quality_class"
+            or metadata.get("classes") != training.CLASSES
+            or metadata.get("features") != training.FEATURES):
+        raise ValueError("Use the saved Low/Medium/High random forest and its original features.")
+    if metadata.get("model_sha256") != file_hash(model_dir / "model.joblib"):
+        raise ValueError("The saved forest does not match its training metadata.")
+    raw, X, development, reserved = training.load_saved_holdout(csv_path, model_dir, metadata)
+    pipeline = joblib.load(model_dir / "model.joblib")
+    forest, scaler = pipeline.named_steps["classifier"], pipeline.named_steps["scaler"]
+    if (not isinstance(forest, RandomForestClassifier)
+            or list(pipeline.classes_) != list(range(len(training.CLASSES)))
+            or list(scaler.feature_names_in_) != training.FEATURES
+            or np.any(scaler.n_samples_seen_ != len(development))
+            or metadata["training_rows"] != len(development)):
+        raise ValueError("The forest pipeline must match the saved development rows and class encoding.")
+    test_data = raw.iloc[reserved][["wine_type", "quality_class"]].copy()
+    test_data.insert(0, "source_row", reserved)
+    if set(test_data.quality_class) != set(training.CLASSES):
+        raise ValueError("Test ROC curves require Low, Medium, and High examples.")
+    return pipeline, X.iloc[reserved], test_data, metadata
+
+
+def save_accuracy_plot(predictions, scores, baseline_accuracy, output, model_name="Neural network"):
     plt = training.plt
     fig, axes = plt.subplots(1, 2, figsize=(12, 4.8))
     values = [scores["accuracy"] * 100, baseline_accuracy * 100]
-    bars = axes[0].bar(["Neural network", "Training-majority\nbaseline"], values,
+    bars = axes[0].bar([model_name, "Training-majority\nbaseline"], values,
                        color=["#246d9c", "#999999"])
     axes[0].bar_label(bars, labels=[f"{v:.1f}%" for v in values], padding=5)
     axes[0].set(ylabel="Test accuracy (%)", ylim=(0, 110), title="Overall classification accuracy")
@@ -100,13 +104,13 @@ def save_accuracy_plot(predictions, scores, baseline_accuracy, output):
     axes[1].grid(False)
     fig.colorbar(img, ax=axes[1], shrink=0.8)
     correct = int(np.count_nonzero(predictions.actual_class == predictions.predicted_class))
-    fig.suptitle(f"Neural network: reserved-test results | {correct}/{len(predictions)} correct")
+    fig.suptitle(f"{model_name}: reserved-test results | {correct}/{len(predictions)} correct")
     training.save_plot(fig, output, "test_accuracy.png")
     pd.DataFrame(matrix, index=pd.Index(training.CLASSES, name="actual_class"),
                  columns=training.CLASSES).to_csv(output / "test_confusion_matrix.csv")
 
 
-def save_roc_plot(predictions, auc, output):
+def save_roc_plot(predictions, auc, output, model_name="Neural network"):
     actual = predictions.actual_class.to_numpy()
     probabilities = predictions[training.PROBABILITY_COLUMNS].to_numpy()
     curves = []
@@ -124,7 +128,7 @@ def save_roc_plot(predictions, auc, output):
     ax.plot([0, 1], [0, 1], color="grey", ls="--", label="Chance: AUC 0.5000")
     ax.set(xlim=(0, 1), ylim=(0, 1.02), xlabel="False positive rate",
            ylabel="True positive rate (recall)",
-           title=f"Neural network: reserved-test ROC curves\nMacro AUC {auc['macro']:.4f} | {len(actual):,} test rows")
+           title=f"{model_name}: reserved-test ROC curves\nMacro AUC {auc['macro']:.4f} | {len(actual):,} test rows")
     ax.legend(loc="lower right")
     ax.grid(alpha=0.2)
     training.save_plot(fig, output, "test_roc_curves.png")
@@ -137,8 +141,21 @@ def run_test(args):
     """Evaluate once with the saved classifier; never fit or select a model."""
     model_dir, output = Path(args.model_dir), Path(args.output)
     torch.set_num_threads(1)
-    model, scaler, X, data, checkpoint = load_test_data(args.csv, model_dir)
-    probabilities = training.predict(model, scaler, X)
+    is_forest = getattr(args, "model", "neural-network") == "random-forest"
+    model_name = "Random forest" if is_forest else "Neural network"
+    if is_forest:
+        model, X, data, checkpoint = load_forest_test_data(args.csv, model_dir)
+        order = [list(model.classes_).index(i) for i in range(len(training.CLASSES))]
+        probabilities = model.predict_proba(X)[:, order]
+        counts = checkpoint["final_training_class_counts"]
+        model_filename = "model.joblib"
+        description = f"{checkpoint['parameters']['n_estimators']}-tree random forest"
+    else:
+        model, scaler, X, data, checkpoint = load_test_data(args.csv, model_dir)
+        probabilities = training.predict(model, scaler, X)
+        counts = checkpoint["training_class_counts"]
+        model_filename = "model.pt"
+        description = f"{list(checkpoint['hidden_layers'])} neural classifier"
     actual = pd.Categorical(data.quality_class, categories=training.CLASSES).codes
     scores = training.metrics(actual, probabilities)
     auc = training.classification_roc_auc(data.quality_class.to_numpy(), probabilities)
@@ -151,27 +168,32 @@ def run_test(args):
         predictions.actual_class, predictions.predicted_class, labels=training.CLASSES, zero_division=0)
     class_metrics = pd.DataFrame({"class": training.CLASSES, "precision": precision,
                                   "recall": recall, "f1": f1, "support": support})
-    majority = max(checkpoint["training_class_counts"], key=checkpoint["training_class_counts"].get)
+    majority = max(counts, key=counts.get)
     baseline_accuracy = float(np.mean(predictions.actual_class == majority))
-    summary = {"data_source": training.data_source(args.csv), "target": "quality_class",
+    summary = {"model": model_name, "evaluator": "testing.py",
+               "data_source": training.data_source(args.csv), "target": "quality_class",
                "classes": training.CLASSES, "split": "test", "test_evaluated": True,
                "model_refitted": False, "scaler_refitted": False,
-               "hidden_layers": list(checkpoint["hidden_layers"]), "training_rows": checkpoint["training_rows"],
-               "model_sha256": file_hash(model_dir / "model.pt"),
+               "training_rows": checkpoint["training_rows"],
+               "model_sha256": file_hash(model_dir / model_filename),
                "scaler_sha256": file_hash(model_dir / "scaler.joblib"),
                "partition_assignments_sha256": file_hash(model_dir / "partition_assignments.csv"),
                "test_metrics": scores, "roc_auc": auc,
                "majority_baseline": {"class_from_training": majority, "test_accuracy": baseline_accuracy},
                "per_class": class_metrics.to_dict(orient="records")}
+    if is_forest:
+        summary["parameters"] = checkpoint["parameters"]
+    else:
+        summary["hidden_layers"] = list(checkpoint["hidden_layers"])
     output.mkdir(parents=True, exist_ok=True)
     predictions.to_csv(output / "test_predictions.csv", index=False)
     class_metrics.to_csv(output / "test_metrics_by_class.csv", index=False)
     (output / "test_metrics.json").write_text(json.dumps(summary, indent=2, allow_nan=False) + "\n")
     training.plt.style.use("seaborn-v0_8-whitegrid")
-    save_accuracy_plot(predictions, scores, baseline_accuracy, output)
-    save_roc_plot(predictions, auc, output)
-    lines = ["# Neural network reserved-test evaluation", "",
-             f"Evaluated **{len(predictions):,} reserved rows** with the saved {list(checkpoint['hidden_layers'])} classifier and scaler.",
+    save_accuracy_plot(predictions, scores, baseline_accuracy, output, model_name=model_name)
+    save_roc_plot(predictions, auc, output, model_name=model_name)
+    lines = [f"# {model_name} reserved-test evaluation", "",
+             f"Evaluated **{len(predictions):,} reserved rows** with the saved {description} and scaler.",
              "The exact test membership comes from partition_assignments.csv. No model or scaler was refitted.",
              "Predictions are Low, Medium, or High. Numerical quality is unused.", "",
              f"Accuracy: **{scores['accuracy']:.1%}**; macro F1: **{scores['macro_f1']:.4f}**; macro ROC AUC: **{auc['macro']:.4f}**.",
@@ -179,12 +201,13 @@ def run_test(args):
              "| Class | Precision | Recall | F1 | Test rows |", "|---|---:|---:|---:|---:|"]
     lines.extend(f"| {row['class']} | {row['precision']:.1%} | {row['recall']:.1%} | {row['f1']:.4f} | {row['support']} |"
                  for row in summary["per_class"])
-    lines.extend(["", "ROC curves use softmax probabilities with each class versus the rest.",
+    command = "python3 testing.py --model random-forest" if is_forest else "python3 testing.py"
+    lines.extend(["", "ROC curves use class probabilities with each class versus the rest.",
                   "This evaluates the reserved portion of this training run. These source rows overlap earlier experiments.", "",
                   "- [Test accuracy and confusion matrix](test_accuracy.png)",
                   "- [Test ROC curves](test_roc_curves.png)",
                   "- [Metrics](test_metrics.json) and [per-row predictions](test_predictions.csv)", "",
-                  "Reproduce: `python3 testing.py` (defaults to the active saved neural network)."])
+                  f"Reproduce: `{command}`."])
     (output / "report.md").write_text("\n".join(lines) + "\n")
     print(f"Test rows: {len(predictions):,}; accuracy: {scores['accuracy']:.1%}; "
           f"macro F1: {scores['macro_f1']:.4f}; macro ROC AUC: {auc['macro']:.4f}")
@@ -195,11 +218,13 @@ def run_test(args):
 def main(argv=None):
     root = Path(__file__).resolve().parent
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--model", choices=["neural-network", "random-forest"], default="neural-network")
     parser.add_argument("--csv", type=Path, default=root / "wine2.csv")
-    parser.add_argument("--model-dir", type=Path,
-                        default=root / "wine_restratified_visuals" / "wine_neural_network")
+    parser.add_argument("--model-dir", type=Path, help="Default: selected model directory in wine_restratified_visuals/")
     parser.add_argument("--output", type=Path, help="Default: testing/ inside the model directory")
     args = parser.parse_args(argv)
+    folder = "wine_random_forest" if args.model == "random-forest" else "wine_neural_network"
+    args.model_dir = args.model_dir or root / "wine_restratified_visuals" / folder
     args.output = args.output or args.model_dir / "testing"
     run_test(args)
 

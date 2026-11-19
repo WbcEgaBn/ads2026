@@ -1,0 +1,78 @@
+{
+  "model": "Random forest",
+  "evaluator": "testing.py",
+  "data_source": {
+    "csv": "wine2.csv",
+    "sha256": "ff8898e24f19f48a77ffe8f5a7a0d2784388f184f4e4a4bf3276841eeebaacff"
+  },
+  "target": "quality_class",
+  "classes": [
+    "Low",
+    "Medium",
+    "High"
+  ],
+  "split": "test",
+  "test_evaluated": true,
+  "model_refitted": false,
+  "scaler_refitted": false,
+  "training_rows": 4788,
+  "model_sha256": "58b5683b73a6ee5e0470d44a14d40fc91834f3a925f656d66ef5ad2c6b93e001",
+  "scaler_sha256": "b674e7ecba2189377b8765225a559a1ae973a6410502f01854244acacc1eb458",
+  "partition_assignments_sha256": "98213a74b048322f39eec11c6de01e452fd739675372d6c59ca9c79fe1c28309",
+  "test_metrics": {
+    "n": 532,
+    "accuracy": 0.825187969924812,
+    "macro_f1": 0.5430390020932121,
+    "weighted_f1": 0.8027339590807083,
+    "log_loss": 0.6376877976785804,
+    "roc_auc_macro": 0.8247625523927872
+  },
+  "roc_auc": {
+    "per_class": {
+      "Low": 0.789741180490305,
+      "Medium": 0.8072521347248578,
+      "High": 0.8772943419631987
+    },
+    "macro": 0.8247625523927872,
+    "weighted": 0.8197925689047032,
+    "micro": 0.9384345497201652
+  },
+  "majority_baseline": {
+    "class_from_training": "Medium",
+    "test_accuracy": 0.7669172932330827
+  },
+  "per_class": [
+    {
+      "class": "Low",
+      "precision": 0.5,
+      "recall": 0.08695652173913043,
+      "f1": 0.14814814814814814,
+      "support": 23
+    },
+    {
+      "class": "Medium",
+      "precision": 0.8431372549019608,
+      "recall": 0.9485294117647058,
+      "f1": 0.8927335640138409,
+      "support": 408
+    },
+    {
+      "class": "High",
+      "precision": 0.7246376811594203,
+      "recall": 0.49504950495049505,
+      "f1": 0.5882352941176471,
+      "support": 101
+    }
+  ],
+  "parameters": {
+    "n_estimators": 300,
+    "max_features": "sqrt",
+    "max_depth": null,
+    "min_samples_split": 2,
+    "min_samples_leaf": 1,
+    "bootstrap": false,
+    "class_weight": null,
+    "random_state": 2026,
+    "n_jobs": -1
+  }
+}

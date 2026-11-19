@@ -30,7 +30,7 @@ Both models are classifiers with different split recipes; validation scores are 
 
 Source: `wine2.csv`; SHA-256: `ff8898e24f19f48a77ffe8f5a7a0d2784388f184f4e4a4bf3276841eeebaacff`.
 
-Generated 37 charts in this separate output tree:
+Generated 49 charts in this separate output tree:
 
 - [exploratory/](exploratory/): regenerated source-data charts.
 - [wine_knn/report.md](wine_knn/report.md): KNN K=3 validation, ROC AUC, and class distributions.
@@ -44,3 +44,8 @@ Each model directory includes training_rows.csv (unique training counts), partit
 Training outputs contain reserved row IDs as membership records. Neural network test results are saved separately in testing/.
 
 [Neural network reserved-test results](wine_neural_network/testing/report.md): 532 rows; accuracy 80.5%; macro F1 0.4487; macro ROC AUC 0.8251.
+
+[Random forest on the same neural network splits](wine_random_forest/report.md). Run `python3 train_wine_random_forest.py` after neural network training.
+Validation accuracy 79.6%; macro F1 0.5005; macro ROC AUC 0.8249.
+Training leaves test rows unscored. Evaluate separately with `python3 testing.py --model random-forest`.
+[Random forest testing.py results](wine_random_forest/testing/report.md): accuracy 82.5%; macro F1 0.5430; macro ROC AUC 0.8248.
