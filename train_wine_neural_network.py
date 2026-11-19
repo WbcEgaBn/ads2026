@@ -1,6 +1,6 @@
-"""Compatibility entry point for neural network training in preprocessing.py."""
+"""Entry point for the active Low/Medium/High neural network classifier."""
 
-from preprocessing import neural_main
+from preprocessing_restratified import neural_main
 
 
 if __name__ == "__main__":

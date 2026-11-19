@@ -1,74 +1,87 @@
 # ads2026
 
-Wine quality exploration, KNN classification, and neural network regression
-using `wine2.csv`. Both training implementations and their shared
-preprocessing live in `preprocessing.py`.
-
-Install dependencies and regenerate the outputs:
+Wine quality exploration and **Low / Medium / High classification** with KNN
+and a neural network. The active workflow is `preprocessing_restratified.py`.
 
 ```bash
 python3 -m pip install -r requirements-neural-network.txt
-python3 wine_visuals.py
-python3 preprocessing.py
+python3 preprocessing_restratified.py
 ```
 
-Run one model with `python3 preprocessing.py --model knn` or
-`python3 preprocessing.py --model neural-network --folds 5`.
-The original `model_training.py` and `train_wine_neural_network.py` commands
-remain available as thin entry points.
+Run just the neural network with either command:
 
-Both models fit `StandardScaler` on the original training rows of each fold,
-then use the same class balancing function: retain all Medium training rows
-and resample Low and High with replacement to match the Medium count.
-Every neural network epoch sees those exact equal class totals. Inner training,
-outer fold refits, and the final neural network fit all follow this rule.
-Validation rows retain their original class proportions. Reserved test rows
-are neither transformed nor evaluated.
+```bash
+python3 preprocessing_restratified.py --model neural-network
+python3 train_wine_neural_network.py
+```
 
-The neural network workflow trains and validates only. It reserves the original
-10% test partition without predicting or scoring it. Grouped k-fold validation
-runs on the remaining 90%; identical input measurements stay in one fold.
-Each fold uses a separate inner validation split to select its training epoch
-count, then refits on the outer training fold. Scaling uses training rows only.
-The architecture with the lowest mean fold MAE is trained on all development
-rows for the median selected epoch count, rounded to the nearest integer.
+Run just KNN with `python3 preprocessing_restratified.py --model knn`
+or `python3 model_training.py`. Both use K=3.
+Outputs are in [wine_restratified_visuals/](wine_restratified_visuals/README.md).
 
-Model outputs and validation charts are in `wine_neural_network/`; see
-[`report.md`](wine_neural_network/report.md) for results and limitations.
-`predictions.csv` contains selected-model out-of-fold validation predictions;
-`cv_predictions.csv` includes both architectures and the baselines.
-`fold_metrics.csv` and `fold_assignments.csv` record the validation folds.
-`model.pt` and `scaler.joblib` contain the final development-data fit.
-`training_balance.csv` records class counts before and after balancing for
-every training fit; `training_class_balance.png` shows the final fit's counts.
+Both models predict the existing `quality_class` labels: **Low, Medium, High**.
+They use 11 chemical measurements and red/white wine type as inputs. Numerical
+`quality` is unused by training and is not required in a training CSV.
+Neither `quality` nor `quality_class` is an input feature. Source data and
+historical exploratory charts retain the original numerical score.
 
-KNN keeps its existing stratified 80/20 split, all source rows, 10-fold default,
-distance weighting, Manhattan distance, and macro F1 tuning over odd K values
-from 1 through 21. Its scaler is now fitted separately within each fold.
-Outputs are saved in `wine_knn/`. The neural network retains numerical quality
-as its target and balances its training samples using `quality_class` labels;
-the class label is excluded from the input features. The models' different
-targets and data splits mean their validation scores cannot be compared directly.
+The neural network has three output logits and trains with cross-entropy.
+Softmax produces probabilities in Low/Medium/High order, and the class with
+the largest probability is the prediction. Both candidate architectures
+(32–16 and 64–32 hidden units) are selected by mean validation macro F1.
+There is no numerical score prediction or score rounding.
 
-KNN also saves one-vs-rest ROC AUC from out-of-fold class probabilities. Its
-`metrics.json` contains pooled per-class, macro, weighted, and micro AUC plus
-the mean and SD of fold macro AUC. `roc_auc_by_class.csv` contains class scores;
-`predictions.csv` includes `probability_Low`, `probability_Medium`, and
-`probability_High`. Charts are `roc_curves.png`, `roc_auc_by_fold.png`, and
-`roc_auc_by_k.png`; `roc_curves.csv` stores the plotted curve coordinates.
-K is still selected by macro F1. These validation scores use the folds that
-selected K, so they are not independent test estimates. The neural network
-predicts numerical quality and is evaluated with regression metrics rather
-than multiclass ROC AUC.
+Training partitions preserve observed class proportions. Each source training
+row is used once per epoch or fit, without resampling or class weights.
+StandardScaler is fitted only on the corresponding training rows.
 
-Exploratory charts are in `wine_visuals/`. They describe all source rows,
-including duplicates. KNN retains all source rows; the neural network removes
-exact duplicate rows. All scripts default to the repository's `wine2.csv`,
-including the compatibility training commands, `main.py`, and `eda.py`.
-Each model's `metrics.json` and `report.md` record the input CSV and its SHA-256
-checksum so regenerated results can be traced to the source file.
+The neural network reserves a stratified 10% holdout and uses five outer
+validation folds by default. An inner approximately 80/20 stratified split
+selects an epoch count by maximum macro F1, then a fresh network refits the
+outer training rows. Identical inputs stay together; duplicate feature/label
+rows are removed. The final development fit uses the rounded median of the
+selected architecture's fold epoch counts.
 
-Optional training arguments: `--model`, `--folds`, `--epochs` (maximum per inner
-neural network fit), `--patience`, `--csv`, and `--output`.
-With `--model all` (the default), `--output` is the parent of the two model
-directories and `--folds` overrides both models' defaults.
+KNN keeps a stratified 80/20 holdout, ten validation folds, Manhattan distance,
+distance weighting, and **K fixed at 3** as specified. There is no search over K.
+Training entry points leave reserved test rows unscored. Neural network validation
+selects its architecture; KNN uses the fixed K=3. These are validation results. The two
+models use different partitions and do not provide a paired comparison.
+
+The [neural network report](wine_restratified_visuals/wine_neural_network/report.md)
+contains accuracy, macro F1, ROC AUC, and baseline comparisons. Its output folder
+includes:
+
+- `predictions.csv`: out-of-fold actual/predicted classes and three probabilities.
+- `cv_predictions.csv`: predictions for both architectures and classifier baselines.
+- `validation_metrics_by_class.csv` and `confusion_matrix.csv`: per-class results.
+- `roc_curves.png/.csv`, `roc_auc_by_class.csv`, and `roc_auc_by_fold.png`: ROC results.
+- Learning curves, validation plots, and training/split class distributions.
+- `model.pt` and `scaler.joblib`: the final classifier, class order, and scaler.
+- Fold assignments, histories, partition memberships, and training-row counts.
+
+Evaluate the saved neural network on its remaining reserved 10% with:
+
+```bash
+python3 testing.py
+```
+
+This loads `model.pt`, `scaler.joblib`, and the original test membership from
+`partition_assignments.csv`. It checks the source CSV checksum, keeps training
+and test rows separate, and performs inference without refitting. Numerical
+quality is unused. Results are saved in
+[wine_neural_network/testing/](wine_restratified_visuals/wine_neural_network/testing/report.md):
+`test_accuracy.png` (accuracy and confusion matrix), `test_roc_curves.png`,
+`test_metrics.json`, per-class metrics, and test predictions. Options are
+`--csv`, `--model-dir`, and `--output`.
+
+Optional arguments: `--model`, `--folds`, `--epochs` (maximum inner-fit epochs),
+`--patience`, `--csv`, and `--output`. With `--model all`, `--output` names the
+parent of the two model folders. Each report records the source CSV checksum.
+
+`preprocessing.py` and the original top-level output
+folders are historical references to the earlier balanced experiment. They
+are not the active workflow. `train_wine_neural_network.py` now runs the active
+classifier.
+
+Run classifier checks with `python3 -m unittest discover -s tests`.

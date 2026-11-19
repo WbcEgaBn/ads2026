@@ -1,6 +1,6 @@
-"""Compatibility entry point for balanced KNN training in preprocessing.py."""
+"""Entry point for the active KNN classifier with three neighbours."""
 
-from preprocessing import knn_main
+from preprocessing_restratified import knn_main
 
 
 if __name__ == "__main__":

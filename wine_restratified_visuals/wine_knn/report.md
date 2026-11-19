@@ -6,24 +6,24 @@ Uses the original raw rows and stratified 80/20 development/test split. No test 
 
 StandardScaler is fitted separately on each training fold. Every original training row is used once per fit, without class resampling. The neural network also uses original training rows. Stratified partitions preserve observed class proportions.
 
-Selected K: 1; mean 10-fold macro F1: 0.5281 ± 0.0401. This score also selects K and is not an independent test estimate.
+Fixed K: 3 (specified by the user); mean 10-fold macro F1: 0.5139 ± 0.0319. No search over K is performed. These are validation scores, not reserved-test results.
 
 ## ROC AUC
 
 One-vs-rest ROC AUC uses held-out fold probabilities, with explicit Low/Medium/High column alignment. Every development row is scored once by a model trained on the other folds. The reserved test rows are excluded.
 
-Pooled out-of-fold macro AUC: **0.6462**; weighted AUC: 0.6564; micro AUC: 0.8116.
+Pooled out-of-fold macro AUC: **0.7236**; weighted AUC: 0.7384; micro AUC: 0.8935.
 
-Mean fold macro AUC: 0.6463 ± 0.0217 SD. The pooled score combines validation rows; the fold mean gives each fold equal weight.
+Mean fold macro AUC: 0.7240 ± 0.0273 SD. The pooled score combines validation rows; the fold mean gives each fold equal weight.
 
 | Class vs rest | Pooled ROC AUC |
 |---|---:|
-| Low | 0.5980 |
-| Medium | 0.6517 |
-| High | 0.6890 |
+| Low | 0.6531 |
+| Medium | 0.7315 |
+| High | 0.7862 |
 
-Macro averages the three class AUCs equally; weighted averages use observed class counts; micro pools all row/class pairs. AUC measures ranking across thresholds, not classification accuracy. K remains selected by macro F1, not AUC. These selected-model validation scores may be optimistic because the same folds selected K.
+Macro averages the three class AUCs equally; weighted averages use observed class counts; micro pools all row/class pairs. AUC measures ranking across thresholds, not classification accuracy. K is fixed at 3. K is not selected using these validation folds.
 
-Charts: roc_curves.png, roc_auc_by_fold.png, roc_auc_by_k.png. Numeric outputs: roc_auc_by_class.csv, roc_curves.csv, fold_metrics.csv, tuning.csv, and metrics.json. predictions.csv includes the selected K's out-of-fold class probabilities.
+Charts: roc_curves.png, roc_auc_by_fold.png, macro_f1_by_fold.png. Numeric outputs: roc_auc_by_class.csv, roc_curves.csv, fold_metrics.csv and metrics.json. predictions.csv includes the fixed K=3 model's out-of-fold class probabilities.
 
-See training_rows.csv and split_class_distribution.csv for exact class counts and knn_tuning.png for the tuning curve. KNN and neural network scores use different targets and split recipes and should not be compared directly.
+See training_rows.csv and split_class_distribution.csv for exact class counts and macro_f1_by_fold.png for validation performance. KNN and neural network predict the same classes but use different partitions; these are not paired comparison scores.

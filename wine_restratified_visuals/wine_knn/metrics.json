@@ -12,9 +12,10 @@
     "test_reserved": 1064
   },
   "test_evaluated": false,
-  "best_k": 1,
-  "mean_validation_macro_f1": 0.5280885260333605,
-  "std_validation_macro_f1": 0.04005226718397101,
+  "n_neighbors": 3,
+  "k_selection": "fixed by user",
+  "mean_validation_macro_f1": 0.5138946273762321,
+  "std_validation_macro_f1": 0.03189699031422546,
   "training_policy": "Original training rows once per epoch / fit; no class resampling or class weighting",
   "roc_auc": {
     "method": "one-vs-rest",
@@ -25,15 +26,15 @@
     ],
     "pooled_out_of_fold": {
       "per_class": {
-        "Low": 0.5979564516569681,
-        "Medium": 0.6516711015842511,
-        "High": 0.6890273674498616
+        "Low": 0.6531067580981522,
+        "Medium": 0.7315358057998866,
+        "High": 0.7862189460659359
       },
-      "macro": 0.646218306897027,
-      "weighted": 0.6563690427772236,
-      "micro": 0.8116188909774437
+      "macro": 0.7236205033213249,
+      "weighted": 0.7384216620449697,
+      "micro": 0.8934628777064844
     },
-    "mean_fold_macro": 0.6462671431179816,
-    "std_fold_macro": 0.02166424231313221
+    "mean_fold_macro": 0.7240027081288946,
+    "std_fold_macro": 0.02731960351671114
   }
 }
