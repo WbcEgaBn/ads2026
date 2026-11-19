@@ -1,7 +1,7 @@
 # ads2026
 
 Wine quality exploration, KNN classification, and neural network regression
-using `Combined_Wine.csv`. Both training implementations and their shared
+using `wine2.csv`. Both training implementations and their shared
 preprocessing live in `preprocessing.py`.
 
 Install dependencies and regenerate the outputs:
@@ -50,8 +50,23 @@ as its target and balances its training samples using `quality_class` labels;
 the class label is excluded from the input features. The models' different
 targets and data splits mean their validation scores cannot be compared directly.
 
+KNN also saves one-vs-rest ROC AUC from out-of-fold class probabilities. Its
+`metrics.json` contains pooled per-class, macro, weighted, and micro AUC plus
+the mean and SD of fold macro AUC. `roc_auc_by_class.csv` contains class scores;
+`predictions.csv` includes `probability_Low`, `probability_Medium`, and
+`probability_High`. Charts are `roc_curves.png`, `roc_auc_by_fold.png`, and
+`roc_auc_by_k.png`; `roc_curves.csv` stores the plotted curve coordinates.
+K is still selected by macro F1. These validation scores use the folds that
+selected K, so they are not independent test estimates. The neural network
+predicts numerical quality and is evaluated with regression metrics rather
+than multiclass ROC AUC.
+
 Exploratory charts are in `wine_visuals/`. They describe all source rows,
-including duplicates; model fitting removes exact duplicate rows.
+including duplicates. KNN retains all source rows; the neural network removes
+exact duplicate rows. All scripts default to the repository's `wine2.csv`,
+including the compatibility training commands, `main.py`, and `eda.py`.
+Each model's `metrics.json` and `report.md` record the input CSV and its SHA-256
+checksum so regenerated results can be traced to the source file.
 
 Optional training arguments: `--model`, `--folds`, `--epochs` (maximum per inner
 neural network fit), `--patience`, `--csv`, and `--output`.

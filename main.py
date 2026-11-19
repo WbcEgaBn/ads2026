@@ -1,9 +1,10 @@
 import pandas as pd
+from pathlib import Path
 import sklearn as sk
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-df = pd.read_csv('WineQT.csv')
+df = pd.read_csv(Path(__file__).resolve().with_name('wine2.csv'))
 
 # for i in range(len(df)):
 #     plt.title(df.columns[i])
@@ -12,7 +13,7 @@ df = pd.read_csv('WineQT.csv')
 #     plt.ylabel("frequency")
 #     plt.show()
 
-corr_matrix = df.corr()
+corr_matrix = df.corr(numeric_only=True)
 plt.figure(figsize=(8,6))
 sns.heatmap(
     corr_matrix,

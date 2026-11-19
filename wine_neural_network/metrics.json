@@ -1,4 +1,8 @@
 {
+  "data_source": {
+    "csv": "wine2.csv",
+    "sha256": "ff8898e24f19f48a77ffe8f5a7a0d2784388f184f4e4a4bf3276841eeebaacff"
+  },
   "seed": 2026,
   "target": "quality",
   "features": [
@@ -15,8 +19,8 @@
     "alcohol",
     "wine_type_red"
   ],
-  "raw_rows": 6497,
-  "duplicate_rows_removed": 1177,
+  "raw_rows": 5320,
+  "duplicate_rows_removed": 0,
   "split_sizes": {
     "development": 4788,
     "test_reserved": 532

@@ -1,7 +1,9 @@
 # Wine quality neural network: training and validation
 
+Source: `wine2.csv` (SHA-256: `ff8898e24f19f48a77ffe8f5a7a0d2784388f184f4e4a4bf3276841eeebaacff`).
+
 Target: numerical quality score. Inputs: 11 chemical measurements plus red/white wine type.
-Removed 1,177 identical rows from 6,497 source rows.
+Removed 0 identical rows from 5,320 source rows.
 Development rows: 4,788; reserved test rows: 532.
 **No test-set prediction or evaluation is performed by this workflow.** The original test assignment is preserved.
 Earlier repository outputs evaluated this partition; it is not a historically unseen test set.

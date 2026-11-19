@@ -12,6 +12,7 @@ select epoch counts; identical inputs stay together throughout that workflow.
 """
 
 import argparse
+import hashlib
 import json
 import random
 from pathlib import Path
@@ -27,7 +28,7 @@ import torch
 from sklearn.dummy import DummyRegressor
 from sklearn.linear_model import Ridge
 from sklearn.metrics import confusion_matrix, mean_absolute_error, mean_squared_error, r2_score
-from sklearn.metrics import f1_score
+from sklearn.metrics import f1_score, roc_auc_score, roc_curve
 from sklearn.model_selection import GroupKFold, GroupShuffleSplit, StratifiedKFold, train_test_split
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.preprocessing import StandardScaler
@@ -46,6 +47,12 @@ SCORE_MIN, SCORE_MAX = 0, 10
 CANDIDATES = [(32, 16), (64, 32)]
 METRIC_KEYS = ["mae", "rmse", "r2", "exact_accuracy", "within_one_accuracy"]
 CLASSES = ["Low", "Medium", "High"]
+
+
+def data_source(csv_path):
+    """Record which input file produced the saved training outputs."""
+    path = Path(csv_path)
+    return {"csv": path.name, "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
 
 
 def feature_matrix(data):
@@ -367,6 +374,7 @@ def write_report(summary, output):
     selected, results = summary["selected_model"], summary["cross_validation"]
     report = [
         "# Wine quality neural network: training and validation", "",
+        f"Source: `{summary['data_source']['csv']}` (SHA-256: `{summary['data_source']['sha256']}`).", "",
         "Target: numerical quality score. Inputs: 11 chemical measurements plus red/white wine type.",
         f"Removed {summary['duplicate_rows_removed']:,} identical rows from {summary['raw_rows']:,} source rows.",
         f"Development rows: {summary['split_sizes']['development']:,}; reserved test rows: {summary['split_sizes']['test_reserved']:,}.",
@@ -469,6 +477,7 @@ def run_neural_network(args):
         pd.DataFrame([{column: key, **metrics(part.actual_quality, part.predicted_quality)}
                       for key, part in selected_predictions.groupby(column)]).to_csv(args.output / filename, index=False)
     summary = {
+        "data_source": data_source(args.csv),
         "seed": SEED, "target": "quality", "features": FEATURES,
         "raw_rows": len(raw), "duplicate_rows_removed": len(raw) - len(data),
         "split_sizes": {"development": len(development), "test_reserved": len(test)},
@@ -483,6 +492,7 @@ def run_neural_network(args):
     }
     (args.output / "metrics.json").write_text(json.dumps(summary, indent=2, allow_nan=False) + "\n", encoding="utf-8")
     torch.save({"state_dict": model.state_dict(), "hidden_layers": hidden,
+                "data_source": summary["data_source"],
                 "features": FEATURES, "target_mean": target_mean,
                 "epochs": final_epochs, "training_rows": len(development),
                 "balanced_training_rows": sum(final_counts.values()),
@@ -499,6 +509,97 @@ def run_neural_network(args):
             path.unlink()
     print(pd.DataFrame({name: value["mean"] for name, value in results.items()}).T.to_string())
     print(f"Saved training and validation outputs to {args.output.resolve()}; test set not evaluated.")
+
+
+def classification_roc_auc(actual, probabilities):
+    """One-vs-rest ROC AUC with probability columns explicitly in CLASSES order."""
+    actual = np.asarray(actual)
+    probabilities = np.asarray(probabilities, dtype=float)
+    if probabilities.shape != (len(actual), len(CLASSES)):
+        raise ValueError("Probability columns must follow Low, Medium, High order.")
+    if not np.isin(actual, CLASSES).all() or set(actual) != set(CLASSES):
+        raise ValueError("ROC AUC requires all three quality classes.")
+    if (not np.isfinite(probabilities).all() or (probabilities < 0).any()
+            or (probabilities > 1).any() or not np.allclose(probabilities.sum(axis=1), 1)):
+        raise ValueError("Class probabilities must be finite, within [0, 1], and sum to one.")
+    indicators = actual[:, None] == np.asarray(CLASSES)
+    per_class = {label: float(roc_auc_score(indicators[:, i], probabilities[:, i]))
+                 for i, label in enumerate(CLASSES)}
+    return {
+        "per_class": per_class,
+        "macro": float(np.mean(list(per_class.values()))),
+        "weighted": float(np.average(list(per_class.values()), weights=indicators.sum(axis=0))),
+        "micro": float(roc_auc_score(indicators.ravel(), probabilities.ravel())),
+    }
+
+
+def save_knn_roc_outputs(chosen, fold_metrics, scores, best_k, output):
+    """Save ROC curves and AUC summaries using only out-of-fold probabilities."""
+    probabilities = chosen[[f"probability_{label}" for label in CLASSES]].to_numpy()
+    actual = chosen.actual_class.to_numpy()
+    pooled = classification_roc_auc(actual, probabilities)
+    selected_folds = fold_metrics[fold_metrics.k == best_k].sort_values("fold")
+    pd.DataFrame([
+        {"class": label, "positive_n": int(np.count_nonzero(actual == label)),
+         "negative_n": int(np.count_nonzero(actual != label)),
+         "pooled_roc_auc": pooled["per_class"][label],
+         "mean_fold_roc_auc": float(selected_folds[f"roc_auc_{label}"].mean()),
+         "std_fold_roc_auc": float(selected_folds[f"roc_auc_{label}"].std(ddof=1))}
+        for label in CLASSES
+    ]).to_csv(output / "roc_auc_by_class.csv", index=False)
+
+    colors = {"Low": "#b34b36", "Medium": "#246d9c", "High": "#347d58"}
+    curves = []
+    fig, ax = plt.subplots(figsize=(9, 7))
+    for i, label in enumerate(CLASSES):
+        fpr, tpr, thresholds = roc_curve(actual == label, probabilities[:, i])
+        curves.append(pd.DataFrame({"curve": label, "false_positive_rate": fpr,
+                                    "true_positive_rate": tpr, "threshold": thresholds}))
+        ax.plot(fpr, tpr, color=colors[label], lw=2,
+                label=f"{label} vs rest: AUC {pooled['per_class'][label]:.4f}")
+    indicators = actual[:, None] == np.asarray(CLASSES)
+    fpr, tpr, thresholds = roc_curve(indicators.ravel(), probabilities.ravel())
+    curves.append(pd.DataFrame({"curve": "micro", "false_positive_rate": fpr,
+                                "true_positive_rate": tpr, "threshold": thresholds}))
+    ax.plot(fpr, tpr, color="#6b4a88", ls=":", lw=2,
+            label=f"Micro average: AUC {pooled['micro']:.4f}")
+    ax.plot([0, 1], [0, 1], color="#777777", ls="--", label="Chance: AUC 0.5000")
+    ax.set(xlim=(0, 1), ylim=(0, 1.02), xlabel="False positive rate",
+           ylabel="True positive rate (recall)",
+           title=f"KNN (K={best_k}): out-of-fold ROC curves\n"
+                 f"Macro AUC {pooled['macro']:.4f} | {len(selected_folds)} folds | {len(actual):,} validation rows")
+    ax.legend(loc="lower right")
+    ax.grid(alpha=0.2)
+    save_plot(fig, output, "roc_curves.png")
+    pd.concat(curves, ignore_index=True).to_csv(output / "roc_curves.csv", index=False)
+
+    fig, ax = plt.subplots(figsize=(10, 5))
+    for label in CLASSES:
+        ax.plot(selected_folds.fold, selected_folds[f"roc_auc_{label}"], marker="o",
+                color=colors[label], label=f"{label} vs rest")
+    ax.plot(selected_folds.fold, selected_folds.roc_auc_macro, color="#222222",
+            marker="s", lw=2, label="Macro average")
+    ax.axhline(0.5, color="#777777", ls="--", label="Chance")
+    ax.set(xlabel="Validation fold", ylabel="ROC AUC", ylim=(0, 1.02),
+           xticks=selected_folds.fold,
+           title=f"KNN (K={best_k}): ROC AUC by validation fold")
+    ax.legend(loc="lower right", ncol=2)
+    ax.grid(alpha=0.2)
+    save_plot(fig, output, "roc_auc_by_fold.png")
+
+    fig, ax = plt.subplots(figsize=(9, 5))
+    ax.errorbar(scores.k, scores.roc_auc_mean, yerr=scores.roc_auc_std,
+                marker="o", capsize=4, color="#246d9c", label="Mean fold macro ROC AUC ± SD")
+    ax.axvline(best_k, color="#b63838", ls="--", label=f"K={best_k}, selected by macro F1")
+    ax.set(xlabel="Number of neighbors (K)", ylabel="Macro ROC AUC", ylim=(0, 1.02),
+           xticks=scores.k, title="KNN: validation ROC AUC across candidate K values")
+    ax.legend(loc="lower right")
+    ax.grid(alpha=0.2)
+    save_plot(fig, output, "roc_auc_by_k.png")
+    return {"method": "one-vs-rest", "probability_class_order": CLASSES,
+            "pooled_out_of_fold": pooled,
+            "mean_fold_macro": float(selected_folds.roc_auc_macro.mean()),
+            "std_fold_macro": float(selected_folds.roc_auc_macro.std(ddof=1))}
 
 
 def run_knn(args):
@@ -531,13 +632,23 @@ def run_knn(args):
             model = KNeighborsClassifier(n_neighbors=int(k), weights="distance", metric="manhattan")
             model.fit(train_X, classes[balanced])
             predicted = model.predict(val_X)
+            probabilities = model.predict_proba(val_X)[:, [list(model.classes_).index(label) for label in CLASSES]]
+            auc_scores = classification_roc_auc(classes[val_idx], probabilities)
             score = f1_score(classes[val_idx], predicted, labels=CLASSES, average="macro", zero_division=0)
-            rows.append({"k": int(k), "fold": fold, "macro_f1": float(score), "train_n": len(train_idx), "validation_n": len(val_idx)})
+            rows.append({"k": int(k), "fold": fold, "macro_f1": float(score),
+                         "roc_auc_macro": auc_scores["macro"], "roc_auc_micro": auc_scores["micro"],
+                         "roc_auc_weighted": auc_scores["weighted"],
+                         **{f"roc_auc_{label}": value for label, value in auc_scores["per_class"].items()},
+                         "train_n": len(train_idx), "validation_n": len(val_idx)})
             predictions.append(pd.DataFrame({"source_row": val_idx, "fold": fold, "k": int(k),
+                                              **{f"probability_{label}": probabilities[:, i] for i, label in enumerate(CLASSES)},
                                               "actual_class": classes[val_idx], "predicted_class": predicted}))
         print(f"KNN fold {fold}/{args.folds}: {len(balanced) // 3:,} training samples per class", flush=True)
     fold_metrics = pd.DataFrame(rows)
-    scores = fold_metrics.groupby("k").macro_f1.agg(["mean", "std"]).reset_index()
+    scores = fold_metrics.groupby("k").agg(
+        mean=("macro_f1", "mean"), std=("macro_f1", "std"),
+        roc_auc_mean=("roc_auc_macro", "mean"), roc_auc_std=("roc_auc_macro", "std"),
+    ).reset_index()
     best = scores.loc[scores["mean"].idxmax()]
     best_k = int(best.k)
     all_predictions = pd.concat(predictions, ignore_index=True)
@@ -549,11 +660,14 @@ def run_knn(args):
     scores.to_csv(args.output / "tuning.csv", index=False)
     pd.DataFrame(assignments).to_csv(args.output / "fold_assignments.csv", index=False)
     pd.DataFrame(audit).to_csv(args.output / "training_balance.csv", index=False)
-    summary = {"seed": SEED, "target": "quality_class", "folds": args.folds,
+    summary = {"data_source": data_source(args.csv),
+               "raw_rows": len(raw),
+               "seed": SEED, "target": "quality_class", "folds": args.folds,
                "split_sizes": {"development": len(development), "test_reserved": len(reserved)},
                "test_evaluated": False, "best_k": best_k, "mean_validation_macro_f1": float(best["mean"]),
                "std_validation_macro_f1": float(best["std"]),
                "training_balance": "Keep Medium; sample Low and High with replacement to match Medium; training partitions only"}
+    summary["roc_auc"] = save_knn_roc_outputs(chosen, fold_metrics, scores, best_k, args.output)
     (args.output / "metrics.json").write_text(json.dumps(summary, indent=2) + "\n")
     fig, ax = plt.subplots(figsize=(9, 5))
     ax.errorbar(scores.k, scores["mean"], yerr=scores["std"], marker="o", capsize=4)
@@ -565,11 +679,28 @@ def run_knn(args):
     plot_training_balance(audit, args.output)
     (args.output / "report.md").write_text(
         "# KNN training and validation\n\n"
+        f"Source: `{summary['data_source']['csv']}` (SHA-256: `{summary['data_source']['sha256']}`).\n\n"
         "Uses the original raw rows and stratified 80/20 development/test split. No test evaluation is performed.\n\n"
         "StandardScaler is fitted separately on each training fold. Medium training rows are retained; Low and High are resampled with replacement to match Medium. "
         "The neural network uses the same balancing helper in preprocessing.py. Validation rows retain their original distribution.\n\n"
         f"Selected K: {best_k}; mean {args.folds}-fold macro F1: {best['mean']:.4f} ± {best['std']:.4f}. "
         "This score also selects K and is not an independent test estimate.\n\n"
+        "## ROC AUC\n\n"
+        "One-vs-rest ROC AUC uses held-out fold probabilities, with explicit Low/Medium/High column alignment. "
+        "Every development row is scored once by a model trained on the other folds. The reserved test rows are excluded.\n\n"
+        f"Pooled out-of-fold macro AUC: **{summary['roc_auc']['pooled_out_of_fold']['macro']:.4f}**; "
+        f"weighted AUC: {summary['roc_auc']['pooled_out_of_fold']['weighted']:.4f}; "
+        f"micro AUC: {summary['roc_auc']['pooled_out_of_fold']['micro']:.4f}.\n\n"
+        f"Mean fold macro AUC: {summary['roc_auc']['mean_fold_macro']:.4f} ± {summary['roc_auc']['std_fold_macro']:.4f} SD. "
+        "The pooled score combines validation rows; the fold mean gives each fold equal weight.\n\n"
+        "| Class vs rest | Pooled ROC AUC |\n|---|---:|\n"
+        + "".join(f"| {label} | {summary['roc_auc']['pooled_out_of_fold']['per_class'][label]:.4f} |\n" for label in CLASSES)
+        + "\nMacro averages the three class AUCs equally; weighted averages use observed class counts; micro pools all row/class pairs. "
+        "AUC measures ranking across thresholds, not classification accuracy. K remains selected by macro F1, not AUC. "
+        "These selected-model validation scores may be optimistic because the same folds selected K.\n\n"
+        "Charts: roc_curves.png, roc_auc_by_fold.png, roc_auc_by_k.png. "
+        "Numeric outputs: roc_auc_by_class.csv, roc_curves.csv, fold_metrics.csv, tuning.csv, and metrics.json. "
+        "predictions.csv includes the selected K's out-of-fold class probabilities.\n\n"
         "See training_balance.csv for exact class counts and knn_tuning.png for the tuning curve. "
         "KNN and neural network scores use different targets and split recipes and should not be compared directly.\n"
     )
@@ -580,7 +711,7 @@ def main(argv=None, default_model="all"):
     root = Path(__file__).resolve().parent
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model", choices=["all", "knn", "neural-network"], default=default_model)
-    parser.add_argument("--csv", type=Path, default=root / "Combined_Wine.csv")
+    parser.add_argument("--csv", type=Path, default=root / "wine2.csv")
     parser.add_argument("--output", type=Path, help="Output directory; for all models, parent of model directories")
     parser.add_argument("--folds", type=int, help="Default: 10 for KNN, 5 for neural network")
     parser.add_argument("--epochs", type=int, default=400)

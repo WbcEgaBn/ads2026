@@ -1,4 +1,4 @@
-"""Explore Combined_Wine.csv and save a chart for every variable.
+"""Explore wine2.csv and save a chart for every variable.
 
 Usage: python3 wine_visuals.py [path/to/data.csv] [output_directory]
 Requires pandas and matplotlib. Rows (including duplicates) are retained.
@@ -11,7 +11,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import pandas as pd
 
-DATA = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).resolve().with_name('Combined_Wine.csv')
+DATA = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).resolve().with_name('wine2.csv')
 OUT = Path(sys.argv[2]) if len(sys.argv) > 2 else Path(__file__).resolve().with_name('wine_visuals')
 OUT.mkdir(parents=True, exist_ok=True)
 df = pd.read_csv(DATA)

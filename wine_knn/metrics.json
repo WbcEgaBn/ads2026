@@ -1,14 +1,39 @@
 {
+  "data_source": {
+    "csv": "wine2.csv",
+    "sha256": "ff8898e24f19f48a77ffe8f5a7a0d2784388f184f4e4a4bf3276841eeebaacff"
+  },
+  "raw_rows": 5320,
   "seed": 2026,
   "target": "quality_class",
   "folds": 10,
   "split_sizes": {
-    "development": 5197,
-    "test_reserved": 1300
+    "development": 4256,
+    "test_reserved": 1064
   },
   "test_evaluated": false,
-  "best_k": 1,
-  "mean_validation_macro_f1": 0.6002784540514335,
-  "std_validation_macro_f1": 0.03786332676929811,
-  "training_balance": "Keep Medium; sample Low and High with replacement to match Medium; training partitions only"
+  "best_k": 3,
+  "mean_validation_macro_f1": 0.5324235812213555,
+  "std_validation_macro_f1": 0.041543543206286906,
+  "training_balance": "Keep Medium; sample Low and High with replacement to match Medium; training partitions only",
+  "roc_auc": {
+    "method": "one-vs-rest",
+    "probability_class_order": [
+      "Low",
+      "Medium",
+      "High"
+    ],
+    "pooled_out_of_fold": {
+      "per_class": {
+        "Low": 0.6486984543291403,
+        "Medium": 0.7207808226772118,
+        "High": 0.7777654424912775
+      },
+      "macro": 0.7157482398325432,
+      "weighted": 0.728384915856762,
+      "micro": 0.8365364719511419
+    },
+    "mean_fold_macro": 0.7156691930155892,
+    "std_fold_macro": 0.02927332547942776
+  }
 }

@@ -1,13 +1,15 @@
 WINE DATA ANALYSIS AND BALANCED MODEL TRAINING REPORT
 
 1. Data and exploratory visuals
-Combined_Wine.csv contains 6,497 rows, 14 variables, no missing values, and
-1,177 exact duplicates. The 21 exploratory charts retain all source rows.
-Alcohol correlates with quality at r = 0.44; density at r = -0.31 and
+wine2.csv contains 5,320 rows, 14 variables, 0 missing values, and
+0 exact duplicates. All scripts default to this dataset. The 21 exploratory
+charts were regenerated from these source rows.
+Source SHA-256: ff8898e24f19f48a77ffe8f5a7a0d2784388f184f4e4a4bf3276841eeebaacff
+Alcohol correlates with quality at r = 0.47; density at r = -0.33 and
 volatile acidity at r = -0.27. These associations are not causal findings.
 
 2. Shared implementation and scaling
-Both training implementations now live in preprocessing.py.
+Both training implementations live in preprocessing.py.
 model_training.py and train_wine_neural_network.py are compatibility entry
 points. Both models use the same chemical features and binary wine encoding.
 StandardScaler learns feature means and variances from each original training
@@ -15,25 +17,24 @@ partition before resampling. Validation rows receive that training partition's
 transformation. Reserved test rows are not transformed or evaluated.
 
 3. Equal training counts for Low, Medium, and High
-The shared balance_training_indices helper implements the original KNN policy:
-retain Medium training rows, then sample Low and High with replacement to match
-the Medium count. Resampling happens only after data is partitioned.
-Every inner neural network fit, outer fold refit, and final fit uses exactly
-equal class totals. Each epoch traverses that balanced dataset once.
-The final neural network fit uses 3,665 Low, 3,665 Medium, and 3,665 High samples
-per epoch (10,995 samples total, including repeated minority-class rows).
+The shared balance_training_indices helper retains Medium training rows, then
+samples Low and High with replacement to match the Medium count. Resampling
+happens only after data is partitioned. Every inner neural network fit, outer
+fold refit, and final fit uses exactly equal class totals. Each epoch traverses
+that balanced dataset once. The final fit uses 3,665 Low, 3,665 Medium,
+and 3,665 High samples per epoch (10,995 total, including repeated rows).
 Validation folds keep their original class proportions.
 training_balance.csv in each model directory records counts for every fit.
 
 4. Training and validation recipes
-KNN retains the original 6,497 raw rows, stratified 80/20 split, 10-fold
-validation, distance weighting, Manhattan distance, and odd K values 1–21.
-Scaling is now fitted inside each fold. Its 1,300 test rows are not evaluated.
-Best K: 1; mean validation macro F1: 0.6003.
+KNN uses all 5,320 wine2.csv rows, a stratified 80/20 split, 10-fold validation,
+distance weighting, Manhattan distance, and odd K values 1–21.
+Scaling is fitted inside each fold. Its 1,064 test rows are not evaluated.
+Best K: 3; mean validation macro F1: 0.5324.
 
 The neural network retains numerical quality as its target; quality_class is
-used for balancing and excluded from input features. Exact duplicates are
-removed, leaving 5,320 rows. The original 532-row test partition is reserved.
+used for balancing and excluded from input features. Deduplication removes
+0 rows, leaving 5,320. A 532-row test partition is reserved.
 Grouped 5-fold validation uses 4,788 development rows; identical inputs stay
 together. An inner grouped validation split selects the epoch count, then each
 network refits on its full outer training fold before validation scoring.
@@ -48,9 +49,12 @@ mean is calculated from the balanced training samples.
 Regenerated the neural network model, validation predictions, six model charts,
 and KNN validation outputs and charts. training_class_balance.png shows counts
 before and after resampling. Full results are in each model directory's report.md.
-Verified equal counts in all 31 neural network/baseline training records and all
-10 KNN folds; sampled rows stay inside their training partitions. Confirmed
-validation coverage, reserved-row exclusion, and saved scaler means/variances.
+Both metrics.json files and reports record wine2.csv and its SHA-256 checksum;
+the saved neural network checkpoint also records the source.
+Verified equal class counts in all 31 neural network/baseline training records
+and all 10 KNN folds. Confirmed validation coverage, source labels, reserved-row
+exclusion, grouped fold isolation, saved scaler means/variances, and saved neural
+network training predictions. All training entry points default to wine2.csv.
 No test-set predictions or test-set model evaluation were performed.
 
 6. Limitations
@@ -61,8 +65,26 @@ recipes; their scores are not directly comparable. Earlier repository outputs
 evaluated the neural network's reserved partition, so it is not historically
 unseen. This workflow does not evaluate it.
 
-Regenerate both workflows:
+Regenerate charts and both workflows:
+python3 wine_visuals.py
 python3 preprocessing.py
 
 Run only the neural network:
 python3 preprocessing.py --model neural-network --folds 5
+
+7. KNN ROC AUC from out-of-fold probabilities
+Recomputed probabilities using the same 10 validation folds on wine2.csv.
+K remains 3, selected by mean validation macro F1; existing class predictions
+are unchanged. Each development row is scored by a model that excluded it.
+Pooled one-vs-rest AUC: Low 0.6487; Medium 0.7208; High 0.7778.
+Pooled macro AUC: 0.7157; weighted AUC: 0.7284; micro AUC: 0.8365.
+Mean fold macro AUC: 0.7157 +/- 0.0293 SD.
+Visuals: wine_knn/roc_curves.png, wine_knn/roc_auc_by_fold.png,
+and wine_knn/roc_auc_by_k.png. Scores and curve coordinates are also saved
+as CSV files and in wine_knn/metrics.json. AUC measures ranking rather than
+accuracy. K was selected on these folds, so scores are validation estimates
+and may be optimistic. The reserved test partition was not evaluated.
+The neural network remains a numerical-quality regressor; multiclass ROC AUC
+is not directly defined for its scalar output.
+Verified AUC against sklearn multiclass scoring and numeric integration of
+saved curve points; verified probability columns and reserved-row exclusion.

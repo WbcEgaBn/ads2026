@@ -1,11 +1,11 @@
-from narwhals import corr
 import pandas as pd
+from pathlib import Path
 import sklearn as sk
 import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
 
-df = pd.read_csv('Combined_Wine.csv')
+df = pd.read_csv(Path(__file__).resolve().with_name('wine2.csv'))
 
 # for i in range(len(df)):
 #     plt.title(df.columns[i])
